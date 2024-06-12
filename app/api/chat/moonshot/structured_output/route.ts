@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
-
-import { PromptTemplate } from "@langchain/core/prompts";
-import { JsonOutputFunctionsParser } from "@langchain/core/output_parsers/openai_functions";
+import {
+  ChatPromptTemplate,
+  HumanMessagePromptTemplate,
+  SystemMessagePromptTemplate,
+} from "@langchain/core/prompts";
 import { PROMPT_TEMPLATE, formatMessage } from "../contants";
 import { ChatMoonshot } from "@langchain/community/chat_models/moonshot";
+import { StructuredOutputParser } from "langchain/output_parsers";
 
 export const runtime = "edge";
 
@@ -17,15 +19,6 @@ export async function POST(req: NextRequest) {
     const messages = body.messages ?? [];
     const formattedPreviousMessages = messages.slice(0, -1).map(formatMessage);
     const currentMessageContent = messages[messages.length - 1].content;
-
-    const prompt = PromptTemplate.fromTemplate(PROMPT_TEMPLATE);
-    /**
-     * Function calling is currently only supported with ChatOpenAI models
-     */
-    // const model = new ChatOpenAI({
-    //   temperature: 0.8,
-    //   modelName: "gpt-3.5-turbo-1106",
-    // });
 
     const schema = z.object({
       tone: z
@@ -38,6 +31,13 @@ export async function POST(req: NextRequest) {
         .optional(z.string())
         .describe("The final punctuation mark in the input, if any."),
     });
+    const parser = StructuredOutputParser.fromZodSchema(schema);
+
+    const prompt = ChatPromptTemplate.fromMessages([
+      SystemMessagePromptTemplate.fromTemplate(`${PROMPT_TEMPLATE}。回答用户输入，将输出包装在 'json' 标签里\n{formatInstructions}
+      `),
+      HumanMessagePromptTemplate.fromTemplate("用户的输入: {inputText}"),
+    ]);
 
     const model = new ChatMoonshot({
       temperature: 0.8,
@@ -45,40 +45,14 @@ export async function POST(req: NextRequest) {
       apiKey: process.env.MOONSHOT_API_KEY,
     });
 
-    /**
-     * We use Zod (https://zod.dev) to define our schema for convenience,
-     * but you can pass JSON Schema directly if desired.
-     */
-
-    /**
-     * Bind the function and schema to the OpenAI model.
-     * Future invocations of the returned model will always use these arguments.
-     *
-     * Specifying "function_call" ensures that the provided function will always
-     * be called by the model.
-     */
-    const functionCallingModel = model.bind({
-      // @ts-ignore
-      functions: [
-        {
-          name: "output_formatter",
-          description: "Should always be used to properly format output",
-          parameters: zodToJsonSchema(schema),
-        },
-      ],
-      function_call: { name: "output_formatter" },
+    const partialedPrompt = await prompt.partial({
+      formatInstructions: parser.getFormatInstructions(),
     });
-
-    /**
-     * Returns a chain with the function calling model.
-     */
-    const chain = prompt
-      .pipe(functionCallingModel)
-      .pipe(new JsonOutputFunctionsParser());
+    const chain = partialedPrompt.pipe(model).pipe(parser);
 
     const result = await chain.invoke({
-      chat_history: formattedPreviousMessages,
-      input: currentMessageContent,
+      history: formattedPreviousMessages,
+      inputText: currentMessageContent,
     });
 
     return NextResponse.json(result, { status: 200 });

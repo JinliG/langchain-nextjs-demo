@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Message as VercelChatMessage, StreamingTextResponse } from "ai";
 
-import { PromptTemplate } from "@langchain/core/prompts";
+import {
+  ChatPromptTemplate,
+  HumanMessagePromptTemplate,
+  SystemMessagePromptTemplate,
+} from "@langchain/core/prompts";
 import { HttpResponseOutputParser } from "langchain/output_parsers";
 
 import { ChatMoonshot } from "@langchain/community/chat_models/moonshot";
@@ -25,7 +29,10 @@ export async function POST(req: NextRequest) {
     // 提取当前用户的输入消息内容。
     const currentMessageContent = messages[messages.length - 1].content;
     // 使用预定义的模板构建对话上下文。
-    const prompt = PromptTemplate.fromTemplate(PROMPT_TEMPLATE);
+    const prompt = ChatPromptTemplate.fromMessages([
+      SystemMessagePromptTemplate.fromTemplate(PROMPT_TEMPLATE),
+      HumanMessagePromptTemplate.fromTemplate("额外的输入: {inputText}"),
+    ]);
 
     // 初始化ChatMoonshot模型，用于生成AI响应。
     const model = new ChatMoonshot({
@@ -42,8 +49,8 @@ export async function POST(req: NextRequest) {
 
     // 生成并返回流式响应。
     const stream = await chain.stream({
-      chat_history: formattedPreviousMessages.join("\n"),
-      input: currentMessageContent,
+      history: formattedPreviousMessages.join("\n"),
+      inputText: currentMessageContent,
     });
 
     return new StreamingTextResponse(stream);
