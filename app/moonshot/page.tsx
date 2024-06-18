@@ -27,6 +27,11 @@ export default function AgentsPage(props: PageProps) {
             🌕 Moonshot Chat 结构化输出
           </a>
         </li>
+        <li>
+          <a className="mr-4" href="/moonshot?mode=agent">
+            🌕 Moonshot Chat 默认AgentTools
+          </a>
+        </li>
       </ul>
     </div>
   );

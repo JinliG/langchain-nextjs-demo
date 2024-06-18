@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     // 使用预定义的模板构建对话上下文。
     const prompt = ChatPromptTemplate.fromMessages([
       SystemMessagePromptTemplate.fromTemplate(PROMPT_TEMPLATE),
-      HumanMessagePromptTemplate.fromTemplate("额外的输入: {inputText}"),
+      HumanMessagePromptTemplate.fromTemplate("用户输入: {inputText}"),
     ]);
 
     // 初始化ChatMoonshot模型，用于生成AI响应。
